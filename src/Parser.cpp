@@ -23,14 +23,14 @@ int Parser::parsePost(const string& query, map<string, Table>& tables){
 	if(queryType == "create"){return parseCreate(query, tables);}
 	if(queryType == "insert"){return parseInsert(query, tables);}
 	if(queryType == "delete"){return parseDelete(query, tables);}
-	// if(queryType == "update"){return parseUpdate(query, tables);}
+	if(queryType == "update"){return parseUpdate(query, tables);}
 
 	cout << "ERROR: invalid query type" << endl;
 	exit(-1);
 	return -1;
 }
 
-vector<vector<variant<string, int, bool>>> Parser::parseGet(const string& query, map<string, Table>& tables){
+ResultSet Parser::parseGet(const string& query, map<string, Table>& tables){
 	cmatch result;
 	regex reg(R"((\w+))");
 	regex_search(query.c_str(), result, reg);		
@@ -43,8 +43,7 @@ vector<vector<variant<string, int, bool>>> Parser::parseGet(const string& query,
 
 	cout << "ERROR: invalid query type" << endl;
 	exit(-1);
-	vector<vector<variant<string, int, bool>>> ans;
-	return ans;
+	return ResultSet(false);
 }
 
 
@@ -455,131 +454,14 @@ void Parser::insertVal(int columnNum, string value, vector<variant<string, int, 
 }
 
 
-
-bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const string& condition, Table& table){
-	regex regAllCondition(R"((\w+|\&\&|\|\||\^\^|\!\=|\!|\/|\*|\+|\<\=|\>\=|\=|\<|\>|\%|\|\w+\||\"[\w\s\n]+\"|\(|\)))");
-
-	auto begin = sregex_iterator(condition.begin(), condition.end(), regAllCondition);
-    auto end = sregex_iterator();
-
-    vector<string> vecCondition;
-    for (sregex_iterator i = begin; i != end; ++i) {
-        smatch matches = *i;
-        vecCondition.push_back(matches[1].str());
-    }
-
-
-    stack<string> operations;
-    string nonOperator;
-    vector<string> postfixVector;
-
-    if(vecCondition[0] == "("){
-    	operations.push("(");
-    }
-    else{
-    	nonOperator += vecCondition[0] + " ";
-    }
-
-    for(int i = 1; i < vecCondition.size(); i++){
-    	// cout << vecCondition[i] << endl;
-
-    	if(vecCondition[i] == "(" && isMainBoolOperator(vecCondition[i-1])){
-    		if(nonOperator!="")postfixVector.push_back(nonOperator);
-    		nonOperator = "";
-    		operations.push("(");
-    	}
-    	else if(vecCondition[i] == ")" && (i == vecCondition.size()-1 || isMainBoolOperator(vecCondition[i+1]))){
-    		if(nonOperator!="")postfixVector.push_back(nonOperator);
-    		nonOperator = "";
-    		while(!operations.empty() && operations.top() != "("){
-    			postfixVector.push_back(operations.top());
-    			operations.pop();
-    		}
-    		if(operations.empty()){
-    			cout << "ERROR: invalid condition syntax" << endl;
-    			exit(-1);
-    		}
-    		operations.pop();
-    	}
-    	else if(isMainBoolOperator(vecCondition[i])){
-    		if(nonOperator!="")postfixVector.push_back(nonOperator);
-    		nonOperator = "";
-			
-    		while(!operations.empty() && precedence(operations.top()) >= precedence(vecCondition[i])){
-    			postfixVector.push_back(operations.top());
-    			operations.pop();
-    		}
-    		operations.push(vecCondition[i]);
-    	}
-    	else{
-    		nonOperator += vecCondition[i] + " ";
-    	}
-    }
-
-    if(nonOperator != ""){postfixVector.push_back(nonOperator);}
-    while(!operations.empty()){
-    	postfixVector.push_back(operations.top());
-		operations.pop();
-    }
-
-
-    
-
-
-    vector<string> mainPostfixVectorReady;
-    for (int i = 0; i < postfixVector.size(); i++){
-    	if(isMainBoolOperator(postfixVector[i])){
-    		mainPostfixVectorReady.push_back(postfixVector[i]);
-    	}
-    	else{
-    		bool k = executeSecondStepCondition(row, postfixVector[i], table);
-    		if(k) mainPostfixVectorReady.push_back("1");
-    		else mainPostfixVectorReady.push_back("0");
-    	}
-    }
-    stack<bool> ans;
-    for (int i = 0; i < mainPostfixVectorReady.size(); i++){
-    	if(isMainBoolOperator(mainPostfixVectorReady[i])){
-    		bool val1, val2;
-    		if(!ans.empty()){val1 = ans.top();}
-    		else{
-    			cout << "ERROR: invalid bool operand(main step)" << endl;
-    			exit(-1);
-    		}
-    		ans.pop();
-    		if(!ans.empty()){val2 = ans.top();}
-    		else{
-    			cout << "ERROR: invalid bool operand(main step)" << endl;
-    			exit(-1);
-    		}
-    		ans.pop();
-
-    		if(mainPostfixVectorReady[i] == "&&") ans.push(val1&&val2);
-    		if(mainPostfixVectorReady[i] == "||") ans.push(val1||val2);
-    		if(mainPostfixVectorReady[i] == "^^") ans.push(val1^val2);
-    		// if(mainPostfixVectorReady[i] == "!") ans.push(val1!val2);
-    	}
-
-    	else if(mainPostfixVectorReady[i] == "1") ans.push(true);
-    	else if(mainPostfixVectorReady[i] == "0") ans.push(false);
-    }
-
-    if(ans.size() != 1){
-    	cout << "ERROR: invalid sequence(first step)" << endl;
-    	exit(-1);
-    }
-    return ans.top();
-}
-
-
-variant<string, int, bool> Parser::executeLastStepCondition(const vector<variant<string, int, bool>>& row, const vector<string>& vec, Table& table){
+variant<string, int, bool> Parser::executeArithmeticCondition(const vector<variant<string, int, bool>>& row, const vector<string>& vec, Table& table){
 	stack<string> operations;
 	vector<string> postfix;
 
 	int type = -1; // -1-undef, 0-string, 1-bytes, 2-int, 3-bool
 
 	for(int i = 0; i < vec.size(); i++){
-		if(isOperator(vec[i]) || vec[i] == "(" || vec[i] == ")") continue;
+		if(isArithmeticOperator(vec[i]) || vec[i] == "(" || vec[i] == ")") continue;
 		else if(vec[i].size() > 1 && vec[i][0] == '"' && vec[i][vec[i].size()-1] == '"'){
 			type = 0;
 			break;
@@ -636,7 +518,7 @@ variant<string, int, bool> Parser::executeLastStepCondition(const vector<variant
 			}
 			operations.pop();
 		}
-		else if(isOperator(vec[i])){
+		else if(isArithmeticOperator(vec[i])){
 			while(!operations.empty() && precedence(operations.top()) >= precedence(vec[i])){
 				postfix.push_back(operations.top());
 				operations.pop();
@@ -655,9 +537,6 @@ variant<string, int, bool> Parser::executeLastStepCondition(const vector<variant
 
 
 	stack<variant<string, int, bool>> ans;
-
-	
-	
 
 
 	for(int i = 0; i < postfix.size(); i++){
@@ -743,6 +622,8 @@ variant<string, int, bool> Parser::executeLastStepCondition(const vector<variant
 					ans.push(row[index]);
 				}
 			}
+			else if(postfix[i] == "true"){ans.push(true);}
+			else if(postfix[i] == "false"){ans.push(false);}
 			else if (isStringDigit(postfix[i])){
 				ans.push(stoi(postfix[i]));
 			}
@@ -764,60 +645,6 @@ variant<string, int, bool> Parser::executeLastStepCondition(const vector<variant
 
 
 
-bool Parser::executeSecondStepCondition(const vector<variant<string, int, bool>>& row, const string& condition, Table& table){
-	regex reg(R"((\w+|\!\=|\!|\/|\*|\+|\<\=|\>\=|\=|\<|\>|\%|\|\w+\||\"[\w\s\n]+\"|\(|\)))");
-
-	auto begin = sregex_iterator(condition.begin(), condition.end(), reg);
-    auto end = sregex_iterator();
-
-    vector<string> vecConditionLeft;
-    vector<string> vecConditionRight;
-    string operat;
-    int flag = 0; // 0 - left, 1 - right
-    for (sregex_iterator i = begin; i != end; ++i) {
-        smatch matches = *i;
-        if(isBoolOperator(matches[1].str())){
-        	if(flag == 1){
-        		cout << "ERROR: invalid condition syntax(second lvl)" << endl;
-        		exit(-1);
-        	}
-        	operat = matches[1].str();
-        	flag = 1;
-        }
-        else{
-        	if(flag == 0){
-        		vecConditionLeft.push_back(matches[1].str());
-        	}
-        	else{
-        		vecConditionRight.push_back(matches[1].str());
-        	}
-        }
-    }
-
-    if(flag == 0 && vecConditionLeft.size() == 1){
-    	if(vecConditionLeft[0] == "true") return true;
-    	if(vecConditionLeft[0] == "false") return false; 
-    }
-
-    if(flag == 0){
-    	cout << "ERROR: bool operator must have left and right values(or only true and false)" << endl;
-    	exit(-1);
-    }
-
-    variant<string, int, bool> varL = executeLastStepCondition(row, vecConditionLeft, table);
-    variant<string, int, bool> varR = executeLastStepCondition(row, vecConditionRight, table);
-	if (varL.index() != varR.index()){
-		cout << "ERROR: bool operands must have one type" << endl;
-		exit(-1);
-	}
-	if(operat == "=") return varL == varR;
-    if(operat == "<=") return varL <= varR;
-    if(operat == ">=") return varL >= varR;
-    if(operat == "!=") return varL != varR;
-    if(operat == "<") return varL < varR;
-    if(operat == ">") return varL > varR;
-    return false;
-}
 
 bool Parser::isStringDigit(const string& str){
 	for (int i = 0; i < str.size(); i++){
@@ -826,17 +653,12 @@ bool Parser::isStringDigit(const string& str){
 	return true;
 }
 
-
-bool Parser::isMainBoolOperator(const string& op){
-	return op == "&&" || op == "||" || op == "^^" || op == "!";
-}
-
-bool Parser::isBoolOperator(const string& op){
-	return op == "<" || op == "<=" || op == ">" || op == ">=" || op == "!=" || op == "=";
+bool Parser::isArithmeticOperator(const string& op){
+	return op == "+" || op == "-" || op == "*" || op == "/" || op == "%";
 }
 
 bool Parser::isOperator(const string& op){
-	return op == "+" || op == "-" || op == "*" || op == "/" || op == "%";
+	return op == "+" || op == "-" || op == "*" || op == "/" || op == "%" || op == "<" || op == "<=" || op == ">" || op == ">=" || op == "!=" || op == "=" || op == "&&" || op == "||" || op == "^^" || op == "!";
 }
 
 
@@ -849,11 +671,18 @@ int Parser::precedence(const string& op){
 	dict["("] = 0;
 	dict[")"] = 0;
 
-	dict["+"] = 1;
-	dict["-"] = 1;
-	dict["*"] = 2;
-	dict["/"] = 2;
-	dict["%"] = 2;
+	dict["<"] = 3;
+	dict[">"] = 3;
+	dict["<="] = 3;
+	dict[">="] = 3;
+	dict["!="] = 3;
+	dict["="] = 3;
+
+	dict["+"] = 4;
+	dict["-"] = 4;
+	dict["*"] = 5;
+	dict["/"] = 5;
+	dict["%"] = 5;
 
 	if(dict.count(op) == 0){
 		cout << "ERROR: invalid operation" << endl;
@@ -863,7 +692,186 @@ int Parser::precedence(const string& op){
 }
 
 
-vector<vector<variant<string, int, bool>>> Parser::parseSelect(const string& query, map<string, Table>& tables){
+bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const string& condition, Table& table){
+	regex regAllCondition(R"((\w+|\&\&|\|\||\^\^|\!\=|\!|\/|\*|\+|\-|\<\=|\>\=|\=|\<|\>|\%|\|\w+\||\"[\w\s\n]+\"|\(|\)))");
+
+	auto begin = sregex_iterator(condition.begin(), condition.end(), regAllCondition);
+    auto end = sregex_iterator();
+
+    vector<string> vec;
+    for (sregex_iterator i = begin; i != end; ++i) {
+        smatch matches = *i;
+        vec.push_back(matches[1].str());
+    }
+    stack<string> operations;
+	vector<string> postfix;
+
+	for(int i = 0; i < vec.size(); i++){
+		if(vec[i] == "("){
+			operations.push(vec[i]);
+		}
+		else if(vec[i] == ")"){
+			while(!operations.empty() && operations.top() != "("){
+				postfix.push_back(operations.top());
+				operations.pop();
+			}
+			if(operations.empty()){
+				cout << "ERROR: invalid condition(last lvl, make postfix)" << endl;
+				exit(-1);
+			}
+			operations.pop();
+		}
+		else if(isOperator(vec[i])){
+			while(!operations.empty() && precedence(operations.top()) >= precedence(vec[i])){
+				postfix.push_back(operations.top());
+				operations.pop();
+			}
+			operations.push(vec[i]);
+		}
+		else{
+			postfix.push_back(vec[i]);
+		}
+	}
+
+	while(!operations.empty()){
+		postfix.push_back(operations.top());
+		operations.pop();
+	}
+
+
+	stack<variant<string, int, bool>> ans;
+	for (int i = 0; i < postfix.size(); i++){
+		if(isOperator(postfix[i])){
+			variant<string, int, bool> valR;
+			variant<string, int, bool> valL;
+			if(!ans.empty()) valR = ans.top();
+			else{
+				cout << "ERROR: invalid rvalue and lvalue" << endl;
+				exit(-1);
+			}
+			ans.pop();
+			if(!ans.empty()) valL = ans.top();
+			else{
+				cout << "ERROR: invalid rvalue and lvalue" << endl;
+				exit(-1);
+			}
+			ans.pop();
+
+			if(valR.index() != valL.index()){
+				cout << "ERROR: invalid types in condition" << endl;
+				exit(-1);
+			}
+
+
+
+			if(postfix[i] == "+" && valL.index() == 0) {
+				string strL = get<string>(valL);
+				string strR = get<string>(valR);
+				if(strL.size() > 1 && strR.size() > 1 && strL[0] == '"' && strR[0] == '"' && strL[strL.size()-1] == '"' && strR[strR.size()-1] == '"'){
+					string ansStr = "\"";
+					ansStr+=strL.substr(1, strL.size()-2);
+					ansStr+=strR.substr(1, strR.size()-2);
+					ansStr+="\"";
+					ans.push(ansStr);
+				}
+				else if(strL.size() > 2 && strR.size() > 2 && strL[0] == '0' && strR[0] == '0' && strL[1] == 'x' && strR[1] == 'x'){
+					cout << "ERROR: can't use operator + with bytes" << endl;
+					exit(-1);
+				}
+				else{
+					cout << "ERROR: invalid operands for +" << endl;
+					exit(-1);
+				}
+				continue;
+				}
+			if(postfix[i] == "+" && valL.index() == 1) 		{ans.push(get<int>(valL)		+	get<int>(valR)); continue;}
+			else if(postfix[i] == "-" && valL.index() == 1) {ans.push(get<int>(valL)		-	get<int>(valR)); continue;}
+			else if(postfix[i] == "%" && valL.index() == 1) {ans.push(get<int>(valL)		%	get<int>(valR)); continue;}
+			else if(postfix[i] == "/" && valL.index() == 1) {ans.push(get<int>(valL)		/	get<int>(valR)); continue;}
+			else if(postfix[i] == "*" && valL.index() == 1) {ans.push(get<int>(valL)		*	get<int>(valR)); continue;}
+			
+			else if(postfix[i] == "<" && valL.index() == 0) {ans.push(get<string>(valL)		<	get<string>(valR)); continue;}
+			else if(postfix[i] == "<" && valL.index() == 1) {ans.push(get<int>(valL)		<	get<int>(valR)); continue;}
+			else if(postfix[i] == "<" && valL.index() == 2) {ans.push(get<bool>(valL)		<	get<bool>(valR)); continue;}
+
+			else if(postfix[i] == "<=" && valL.index() == 0) {ans.push(get<string>(valL)	<=	get<string>(valR)); continue;}
+			else if(postfix[i] == "<=" && valL.index() == 1) {ans.push(get<int>(valL)		<=	get<int>(valR)); continue;}
+			else if(postfix[i] == "<=" && valL.index() == 2) {ans.push(get<bool>(valL)		<=	get<bool>(valR)); continue;}
+
+			else if(postfix[i] == ">" && valL.index() == 0) {ans.push(get<string>(valL)		>	get<string>(valR)); continue;}
+			else if(postfix[i] == ">" && valL.index() == 1) {ans.push(get<int>(valL)		>	get<int>(valR)); continue;}
+			else if(postfix[i] == ">" && valL.index() == 2) {ans.push(get<bool>(valL)		>	get<bool>(valR)); continue;}
+
+			else if(postfix[i] == ">=" && valL.index() == 0) {ans.push(get<string>(valL)	>=	get<string>(valR)); continue;}
+			else if(postfix[i] == ">=" && valL.index() == 1) {ans.push(get<int>(valL)		>=	get<int>(valR)); continue;}
+			else if(postfix[i] == ">=" && valL.index() == 2) {ans.push(get<bool>(valL)		>=	get<bool>(valR)); continue;}
+
+			else if(postfix[i] == "=" && valL.index() == 0) {ans.push(get<string>(valL)		==	get<string>(valR)); continue;}
+			else if(postfix[i] == "=" && valL.index() == 1) {ans.push(get<int>(valL)		==	get<int>(valR)); continue;}
+			else if(postfix[i] == "=" && valL.index() == 2) {ans.push(get<bool>(valL)		==	get<bool>(valR)); continue;}
+
+			else if(postfix[i] == "!=" && valL.index() == 0) {ans.push(get<string>(valL)	!=	get<string>(valR)); continue;}
+			else if(postfix[i] == "!=" && valL.index() == 1) {ans.push(get<int>(valL)	 	!=	get<int>(valR)); continue;}
+			else if(postfix[i] == "!=" && valL.index() == 2) {ans.push(get<bool>(valL)	 	!=	get<bool>(valR)); continue;}
+
+			else if(postfix[i] == "&&" && valL.index() == 2) {ans.push(get<bool>(valL)		&&	get<bool>(valR)); continue;}
+			else if(postfix[i] == "||" && valL.index() == 2) {ans.push(get<bool>(valL)		||	get<bool>(valR)); continue;}
+			else if(postfix[i] == "^^" && valL.index() == 2) {ans.push(get<bool>(valL)		^	get<bool>(valR)); continue;}
+
+			cout << "ERROR: invalid rvalue and lvalue types" << endl;
+			exit(-1);
+		}
+
+		else{
+			if((postfix[i][0] != '"' || postfix[i][postfix[i].size()-1] != '"') && (postfix[i][0] != '0' || postfix[i][1] != 'x') && (!isStringDigit(postfix[i])) && postfix[i] != "true" && postfix[i] != "false"){
+				
+				if(postfix[i][0] == '|' && postfix[i][postfix[i].size()-1] == '|'){
+					int index = findColIndexByName(postfix[i].substr(1, postfix[i].size()-2), table);
+					
+					if(index == -1){
+						cout << "ERROR: can't find column" << endl;
+						exit(-1); 
+					}
+					if(!table.metadata.columnsInfo[index].hasSize){
+						cout << "ERROR: invalid type of column. Operation size must be at string and bytes" << endl;
+						exit(-1);
+					}
+					ans.push((int)get<string>(row[index]).size()-2);	
+				}
+
+				else{
+					int index = findColIndexByName(postfix[i], table);
+					if(index == -1){
+						cout << "ERROR: can't find column" << endl;
+						exit(-1); 
+					}
+					ans.push(row[index]);
+				}
+			}
+			else if(postfix[i] == "true"){ans.push(true);}
+			else if(postfix[i] == "false"){ans.push(false);}
+			else if (isStringDigit(postfix[i])){
+				ans.push(stoi(postfix[i]));
+			}
+			else{
+				ans.push(postfix[i]);
+			}
+		}
+	}
+
+	
+	if(ans.size() != 1 || ans.top().index() != 2){
+		cout << "ERROR: invalid condition(stack size != 1 or top type isn't bool)" << endl;
+		exit(-1);
+	}
+	return get<bool>(ans.top());
+}
+
+
+
+
+
+ResultSet Parser::parseSelect(const string& query, map<string, Table>& tables){
 	cmatch result;
 	regex reg(R"(([sS][eE][lL][eE][cC][tT])\s+([\w+\s*\,]+)\s+([fF][rR][oO][mM])\s+(\w+)\s+([wW][hH][eE][rR][eE])\s+(.+))");
 
@@ -888,17 +896,26 @@ vector<vector<variant<string, int, bool>>> Parser::parseSelect(const string& que
 
     vector<vector<variant<string, int, bool>>> ans;
     vector<vector<variant<string, int, bool>>> allRows = table.rows;
-
+    ResultSet resSet = ResultSet(true);
     for(int i = 0; i < allRows.size(); i++){
     	if(checkCondition(allRows[i], condition, table)){
     		vector<variant<string, int, bool>> ansRow;
+    		vector<pair<string, TYPES>> columnsInfo;
+    		
     		for(int j = 0; j < columnsIndexes.size(); j++){
     			ansRow.push_back(allRows[i][columnsIndexes[j]]);
+    			
+    			pair<string, TYPES> columnMetadata;
+    			columnMetadata.first = table.metadata.columnsInfo[columnsIndexes[j]].columnName;
+    			columnMetadata.second = table.metadata.columnsInfo[columnsIndexes[j]].type;
+    			
+    			columnsInfo.push_back(columnMetadata);
     		}
-    		ans.push_back(ansRow);
+    		Row row = Row(ansRow, columnsInfo);
+    		resSet.addRow(row);
     	}
     }
-    return ans;
+    return resSet;
 
 }
 
@@ -968,4 +985,100 @@ int Parser::parseDelete(const string& query, map<string, Table>& tables){
     }
     tables[tableName].rows = ans;
     return countForDelete;
+}
+
+
+int Parser::parseUpdate(const string& query, map<string, Table>& tables){
+	cmatch result;
+	regex reg(R"([uU][pP][dD][aA][tT][eE]\s+(\w+)\s+[sS][eE][tT]\s+([\w\+\s\*\,\=\/\"\-\|]+)\s+[wW][hH][eE][rR][eE]\s+(.+))");
+
+    regex_match(query.c_str(), result, reg);
+    
+    if(result.size() != 4){
+    	cout << "ERROR: invalid select syntax" << endl;
+    	exit(-1);
+    }
+
+    string tableName = result[1].str();
+    string assignments = result[2].str();
+    string condition = result[3].str();
+
+    if(tables.count(tableName) == 0){
+    	cout << "ERROR: can't find table in update" << endl;
+    	exit(-1);
+    }
+
+    Table table = tables[tableName];
+
+    int countUpdated = 0;
+    for(int i = 0; i < table.rows.size(); i++){
+    	if(checkCondition(table.rows[i], condition, table)){
+    		countUpdated++;
+			vector<pair<int, variant<string, int, bool>>> vecAssignments = parseAssignments(table.rows[i], assignments, table);
+			for(int j = 0; j < vecAssignments.size(); j++){
+				table.rows[i][vecAssignments[j].first] = vecAssignments[j].second;
+			}    		
+    	}
+    }
+    tables[tableName] = table;
+    return countUpdated;
+
+
+}
+
+vector<pair<int, variant<string, int, bool>>> Parser::parseAssignments(const vector<variant<string, int, bool>>& row, const string& assignments, Table& table){
+	regex reg(R"((\w+)\s*=\s*([\w\s\+\-\*\/\"\%]+))");
+	regex regRight(R"((\+|\-|\*|\|\%|\"\w+\"|\|\w+\||\w+))");
+	auto begin = sregex_iterator(assignments.begin(), assignments.end(), reg);
+    auto end = sregex_iterator();
+
+    vector<pair<int, variant<string, int, bool>>> ans;
+
+    for (sregex_iterator i = begin; i != end; ++i) {
+        smatch matches = *i;
+		string columnName = matches[1].str();
+		string right = matches[2].str();
+
+		auto beginIn = sregex_iterator(right.begin(), right.end(), regRight);
+	    auto endIn = sregex_iterator();
+
+	    vector<string> vecRight;
+	    for (sregex_iterator j = beginIn; j != endIn; ++j){
+	    	smatch matchesIn = *j;
+	    	vecRight.push_back(matchesIn[0].str());
+	    }
+
+	    variant<string, int, bool> rightVal = executeArithmeticCondition(row, vecRight, table);
+	    int index = findColIndexByName(columnName, table);
+	    if(index == -1){
+	    	cout << "ERROR: can't find column(left value in update)" << endl;
+	    	exit(-1);
+	    }
+
+	    TYPES type = table.metadata.columnsInfo[index].type;
+	    if((type == TYPES::STRING || type == TYPES::BYTES) && rightVal.index() == 0){
+	    	pair<int, variant<string, int, bool>> para;
+	    	para.first = index;
+	    	para.second = rightVal;
+	    	ans.push_back(para);
+	    } 
+	    else if(type == TYPES::INT32 && rightVal.index() == 1){
+	    	pair<int, variant<string, int, bool>> para;
+	    	para.first = index;
+	    	para.second = rightVal;
+	    	ans.push_back(para);
+	    } 
+	    else if(type == TYPES::BOOL && rightVal.index() == 2){
+	    	pair<int, variant<string, int, bool>> para;
+	    	para.first = index;
+	    	para.second = rightVal;
+	    	ans.push_back(para);
+	    } 
+	    else{
+	    	cout << "ERROR: invalid operands type in assignments of update" << endl;
+	    	exit(-1);
+	    }
+
+    }
+    return ans;
 }

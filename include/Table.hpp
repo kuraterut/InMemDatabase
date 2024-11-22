@@ -1,21 +1,11 @@
 #include <vector>
 #include <variant>
 #include <set>
+#include "ResultSet.hpp"
 
 using namespace std;
 
-enum class ATTRIBUTE{
-	KEY,
-	UNIQUE,
-	AUTOINCREMENT
-};
 
-enum class TYPES{
-	STRING,
-	BYTES,
-	INT32,
-	BOOL
-};
 
 class Column{
 public:

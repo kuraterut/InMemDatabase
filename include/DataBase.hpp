@@ -6,6 +6,7 @@
 #include <bits/stdc++.h>
 #include <variant>
 #include <map>
+#include <nlohmann/json.hpp>
 #include "Parser.hpp"
 
 // #ifndef FILE_H
@@ -15,6 +16,7 @@
 
 
 using namespace std;
+using json = nlohmann::json;
 
 class Database{
 private:
@@ -23,7 +25,7 @@ private:
 public:
 	// ResultSet executeGet(string query);
 	int executePost(const string& query);
-	vector<vector<variant<string, int, bool>>> executeGet(const string& query);
+	ResultSet executeGet(const string& query);
 
 
 	Database loadFromFile(const string& filePath);
@@ -32,7 +34,8 @@ public:
 	map<string, Table> getMap(){
 		return tables;
 	}
-
+private:
+	bool findAttr(const vector<ATTRIBUTE>& vec, ATTRIBUTE attr);
 
 };
 

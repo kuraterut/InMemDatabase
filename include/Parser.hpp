@@ -11,6 +11,7 @@
 #include <set>
 #include "Table.hpp"
 
+
 using namespace std;
 
 
@@ -19,7 +20,7 @@ public:
 	int parsePost(const string& query, map<string, Table>& tables);
 
 	// ResultSet parseGet(const string& query, map<string, Table>& tables);
-	vector<vector<variant<string, int, bool>>> parseGet(const string& query, map<string, Table>& tables);
+	ResultSet parseGet(const string& query, map<string, Table>& tables);
 	// static ResultSet parseGet(string query, map<string, Table> tables);
 
 private:
@@ -29,7 +30,7 @@ private:
 	int parseDelete(const string& query, map<string, Table>& tables);
 	int parseCreate(const string& query, map<string, Table>& tables);
 	int parseUpdate(const string& query, map<string, Table>& tables);
-	vector<vector<variant<string, int, bool>>> parseSelect(const string& query, map<string, Table>& tables);
+	ResultSet parseSelect(const string& query, map<string, Table>& tables);
 
 	string toLowerCase(const string& word);
 	vector<ATTRIBUTE> parseAttributes(const string& attributes);
@@ -46,16 +47,13 @@ private:
 
 	int precedence(const string& op);
 	bool isOperator(const string& op);
-	bool isBoolOperator(const string& op);
-	bool isMainBoolOperator(const string& op);
 	bool isStringDigit(const string& str);
-	bool executeSecondStepCondition(const vector<variant<string, int, bool>>& row, const string& condition, Table& table);
-	variant<string, int, bool> executeLastStepCondition(const vector<variant<string, int, bool>>& row, const vector<string>& vec, Table& table);
-	bool findMainBoolOperatorBetweenScopesOpen(vector<string> vec, int index);
-	bool findMainBoolOperatorBetweenScopesClose(vector<string> vec, int index);
-
+	bool isArithmeticOperator(const string& op);
+	
+	variant<string, int, bool> executeArithmeticCondition(const vector<variant<string, int, bool>>& row, const vector<string>& vec, Table& table);
 	vector<int> parseColumnsToVecIndex(const string& columns, Table& table);
 
+	vector<pair<int, variant<string, int, bool>>> parseAssignments(const vector<variant<string, int, bool>>& row, const string& assignments, Table& table);
 public:
 	bool checkCondition(const vector<variant<string, int, bool>>& row, const string& condition, Table& table);
 
