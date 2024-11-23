@@ -84,19 +84,32 @@ private:
 class ResultSet{
 private:
 	vector<Row> rows;
-	bool isOk;
+	bool isOkFlag;
+	string error;
+
 public:
 	ResultSet() = default;
 	ResultSet(bool isOkCur){
-		isOk = isOkCur;
+		isOkFlag = isOkCur;
 	}
-	
-	void addRow(const Row& row){
-		rows.push_back(row);
+	ResultSet(vector<Row> vec, bool isOkCur){
+		rows = vec;
+		isOkFlag = isOkCur;
+	}
+	ResultSet(string errorText, bool isOkCur){
+		error = errorText;
+		isOkFlag = isOkCur;
 	}
 
-	auto begin(){return rows.begin();}
-	auto end(){return rows.end();}
+
+	bool isOk() const {return isOkFlag;}
+
+	string getError() const {return error;}
+	
+	void addRow(const Row& row) {rows.push_back(row);}
+
+	auto begin() {return rows.begin();}
+	auto end() {return rows.end();}
 
 	auto begin() const {return rows.begin();}
 	auto end() const {return rows.end();}

@@ -3,15 +3,6 @@
 using namespace std;
 using json = nlohmann::json;
 
-int Database::executePost(const string& query){
-	Parser parser = Parser();
-	return parser.parsePost(query, tables);
-}
-
-ResultSet Database::executeGet(const string& query){
-	Parser parser = Parser();
-	return parser.parseGet(query, tables);
-}
 
 bool Database::findAttr(const vector<ATTRIBUTE>& vec, ATTRIBUTE attr){
 	auto result{std::find(begin(vec), end(vec), attr)};
@@ -191,7 +182,76 @@ Database Database::loadFromFile(const string& filePath){
 		table.rows = rows;
 		database.tables[tableName] = table;
 	}
-
-
 	return database;
+}
+
+string Database::toLowerCase(const string& word){
+	string word0 = word;
+	transform(word0.cbegin(), word0.cend(), word0.begin(), ::tolower);
+	return word0;
+}
+
+
+ResultSet Database::execute(const string& query){
+	ResultSet result;
+	Parser parser = Parser();
+	cmatch resultMatch;
+	regex reg(R"((\w+))");
+	regex_search(query.c_str(), resultMatch, reg);		
+	if(resultMatch.size() < 2){
+		result = ResultSet("ERROR: Invalid query type", false);
+		return result;	
+	}
+
+	string queryType = toLowerCase(resultMatch[1].str());
+	if(queryType == "select"){
+		try{
+			result = ResultSet(parser.parseSelect(query, tables), true);
+		}
+		catch(const string& errMes){
+			result = ResultSet(errMes, false);
+		}
+	}
+	else if(queryType == "create"){
+		try{
+			parser.parseCreate(query, tables);
+			result = ResultSet(true);
+		}
+		catch(const string& errMes){
+			result = ResultSet(errMes, false);
+		}
+
+	}
+	else if(queryType == "insert"){
+		try{
+			parser.parseInsert(query, tables);
+			result = ResultSet(true);
+		}
+		catch(const string& errMes){
+			result = ResultSet(errMes, false);
+		}
+	}
+	else if(queryType == "delete"){
+		try{
+			parser.parseDelete(query, tables);
+			result = ResultSet(true);	
+		}
+		catch(const string& errMes){
+			result = ResultSet(errMes, false);
+		}
+	}
+	else if(queryType == "update"){
+		try{
+			parser.parseUpdate(query, tables);
+			result = ResultSet(true);	
+		}
+		catch(const string& errMes){
+			result = ResultSet(errMes, false);
+		}
+	}
+	else{
+		result = ResultSet("ERROR: Invalid query type", false);
+	}
+	
+	return result;
 }

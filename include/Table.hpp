@@ -29,6 +29,7 @@ public:
 class Table{
 public:
 	TableMetadata metadata;
+	int rowsCountMax;
 	vector<vector<variant<string, int, bool>>> rows;
 };
 

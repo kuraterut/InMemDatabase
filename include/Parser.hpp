@@ -17,25 +17,17 @@ using namespace std;
 
 class Parser{
 public:
-	int parsePost(const string& query, map<string, Table>& tables);
-
-	// ResultSet parseGet(const string& query, map<string, Table>& tables);
-	ResultSet parseGet(const string& query, map<string, Table>& tables);
-	// static ResultSet parseGet(string query, map<string, Table> tables);
+	void parseInsert(const string& query, map<string, Table>& tables);
+	void parseDelete(const string& query, map<string, Table>& tables);
+	void parseCreate(const string& query, map<string, Table>& tables);
+	void parseUpdate(const string& query, map<string, Table>& tables);
+	vector<Row> parseSelect(const string& query, map<string, Table>& tables);
 
 private:
-	// ResultSet parseSelect(string query, map<string, Table> tables);
-	
-	int parseInsert(const string& query, map<string, Table>& tables);
-	int parseDelete(const string& query, map<string, Table>& tables);
-	int parseCreate(const string& query, map<string, Table>& tables);
-	int parseUpdate(const string& query, map<string, Table>& tables);
-	ResultSet parseSelect(const string& query, map<string, Table>& tables);
-
 	string toLowerCase(const string& word);
 	vector<ATTRIBUTE> parseAttributes(const string& attributes);
 	TYPES parseType(const string& type);
-	int parseInsertValues(const string& values, Table& table);
+	void parseInsertValues(const string& values, Table& table);
 
 	void insertVal(int columnNum, string value, vector<variant<string, int, bool>>& newRow, Table& table);
 	void insertColVal(string columnName, string value, vector<variant<string, int, bool>>& newRow, Table& table);
@@ -54,7 +46,8 @@ private:
 	vector<int> parseColumnsToVecIndex(const string& columns, Table& table);
 
 	vector<pair<int, variant<string, int, bool>>> parseAssignments(const vector<variant<string, int, bool>>& row, const string& assignments, Table& table);
-public:
+
+
 	bool checkCondition(const vector<variant<string, int, bool>>& row, const string& condition, Table& table);
 
 };

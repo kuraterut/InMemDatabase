@@ -23,20 +23,16 @@ private:
 	map<string, Table> tables;
 
 public:
-	// ResultSet executeGet(string query);
-	int executePost(const string& query);
-	ResultSet executeGet(const string& query);
+	ResultSet execute(const string& query);
 
-
-	Database loadFromFile(const string& filePath);
 	bool saveToFile(const string& filePath);
+	Database loadFromFile(const string& filePath);
 
-	map<string, Table> getMap(){
-		return tables;
-	}
+	map<string, Table> getMap(){return tables;}
+	
 private:
 	bool findAttr(const vector<ATTRIBUTE>& vec, ATTRIBUTE attr);
-
+	string toLowerCase(const string& word);
 };
 
 

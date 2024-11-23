@@ -11,54 +11,17 @@ string Parser::toLowerCase(const string& word){
 }
 
 
-int Parser::parsePost(const string& query, map<string, Table>& tables){
-	cmatch result;
-	regex reg(R"((\w+))");
-	regex_search(query.c_str(), result, reg);		
-	if(result.size() < 2){
-		cout << "ERROR: invalid query type" << endl;
-		exit(-1);	
-	}
-	string queryType = toLowerCase(result[1].str());
-	if(queryType == "create"){return parseCreate(query, tables);}
-	if(queryType == "insert"){return parseInsert(query, tables);}
-	if(queryType == "delete"){return parseDelete(query, tables);}
-	if(queryType == "update"){return parseUpdate(query, tables);}
-
-	cout << "ERROR: invalid query type" << endl;
-	exit(-1);
-	return -1;
-}
-
-ResultSet Parser::parseGet(const string& query, map<string, Table>& tables){
-	cmatch result;
-	regex reg(R"((\w+))");
-	regex_search(query.c_str(), result, reg);		
-	if(result.size() < 2){
-		cout << "ERROR: invalid query type" << endl;
-		exit(-1);	
-	}
-	string queryType = toLowerCase(result[1].str());
-	if(queryType == "select"){return parseSelect(query, tables);}
-
-	cout << "ERROR: invalid query type" << endl;
-	exit(-1);
-	return ResultSet(false);
-}
-
-
-int Parser::parseCreate(const string& query, map<string, Table>& tables){
+void Parser::parseCreate(const string& query, map<string, Table>& tables){
 	cmatch result;
 	regex regAllSyntax(R"([cC][rR][eE][aA][tT][eE]\s+[tT][aA][bB][lL][eE]\s+(\w+)\s*\(([^\)]+)\))");
 
 	Table table = Table();
+	table.rowsCountMax = 0;
 	TableMetadata tableMetadata = TableMetadata();
 
 	regex_match(query.c_str(), result, regAllSyntax);
 	if(result.size() < 1 || result[0].str().size() != query.size()){
-		cout << "ERROR: invalid create request syntax" << endl;
-		exit(-1);
-		return -1;
+		throw string{"ERROR: invalid create request syntax"};
 	}
 
 	tableMetadata.tableName = result[1].str();
@@ -79,10 +42,11 @@ int Parser::parseCreate(const string& query, map<string, Table>& tables){
         }
         column.columnName = matches[2].str();
         column.type = parseType(toLowerCase(matches[3].str()));
+        
         if(column.type != TYPES::INT32 && findAttr(column.attributes, ATTRIBUTE::AUTOINCREMENT)){
-        	cout << "ERROR: only int32 type can use autoincrement attribute" << endl;
-        	exit(-1);
+        	throw string{"ERROR: only int32 type can use autoincrement attribute"};
         }
+
         if(findAttr(column.attributes, ATTRIBUTE::KEY) || findAttr(column.attributes, ATTRIBUTE::UNIQUE)){
         	column.isUnique = true;
         }
@@ -93,19 +57,16 @@ int Parser::parseCreate(const string& query, map<string, Table>& tables){
         	column.hasSize = true;
         	int posOpen = matches[3].str().find("[")+1;
         	int posClose = matches[3].str().find("]");
-        	if(posOpen == -1 || posClose == -1){
-        		cout << "ERROR: invalid type, string and bytes must have '[]'" << endl;
-        		exit(-1);
+        	if(posOpen == -1 || posClose == -1){	
+        		throw string{"ERROR: invalid type, string and bytes must have '[]'"};
         	}
         	try{column.size = stoi(matches[3].str().substr(posOpen, posClose-posOpen));}
         	catch(...){
-        		cout << "ERROR: invalid value in [] scopes" << endl; 
-        		exit(-1);
+        		throw string{"ERROR: invalid value in [] scopes"};
         	}
         	
         	if(column.size < 1){
-        		cout << "ERROR: string and bytes must have size > 0" << endl;
-        		exit(-1);
+        		throw string{"ERROR: string and bytes must have size > 0"};
         	}
         }
         else{
@@ -116,8 +77,7 @@ int Parser::parseCreate(const string& query, map<string, Table>& tables){
         if(matches[5].matched){
 
         	if (findAttr(column.attributes, ATTRIBUTE::AUTOINCREMENT)){
-        		cout << "ERROR: autoincrement column can't have default value" << endl;
-        		exit(-1);
+        		throw string{"ERROR: autoincrement column can't have default value"};
         	}
 
         	column.hasDefaultValue = true;
@@ -126,8 +86,7 @@ int Parser::parseCreate(const string& query, map<string, Table>& tables){
         			column.value = matches[6].str();
         		}
         		else{
-        			cout << "ERROR: invalid default value" << endl;
-        			exit(-1);
+        			throw string{"ERROR: invalid default value"};
         		}
         	}
         	else if(column.type == TYPES::BYTES){
@@ -135,8 +94,7 @@ int Parser::parseCreate(const string& query, map<string, Table>& tables){
         			column.value = matches[6].str();
         		}
         		else{
-        			cout << "ERROR: invalid size of string of default value" << endl;
-        			exit(-1);
+        			throw string{"ERROR: invalid size of string of default value"};
         		}
         	}
         	else if(column.type == TYPES::INT32){
@@ -144,8 +102,7 @@ int Parser::parseCreate(const string& query, map<string, Table>& tables){
         			column.value = stoi(matches[6].str());
         		}
         		catch(...){
-        			cout << "ERROR: can't convert default value to int" << endl;
-        			exit(-1);
+        			throw string{"ERROR: can't convert default value to int"};
         		}
         	}
         	else if(column.type == TYPES::BOOL){
@@ -156,8 +113,7 @@ int Parser::parseCreate(const string& query, map<string, Table>& tables){
         			column.value = false;
         		}
         		else{
-        			cout << "ERROR: can't convert default value to bool" << endl;
-        			exit(-1);
+        			throw string{"ERROR: can't convert default value to bool"};
         		}
         	}
         }
@@ -168,12 +124,9 @@ int Parser::parseCreate(const string& query, map<string, Table>& tables){
     }
     table.metadata = tableMetadata;
     if(tables.count(tableMetadata.tableName)){
-    	cout << "ERROR: can't create table, table with this name has already created" << endl;
-    	exit(-1);
-    	return 0;
+    	throw string{"ERROR: can't create table, table with this name has already created"};  	
     }
     tables[tableMetadata.tableName] = table;
-    return 1;
 }
 
 
@@ -193,8 +146,7 @@ vector<ATTRIBUTE> Parser::parseAttributes(const string& attributesStr){
         else if(attrLC == "autoincrement"){attributes.push_back(ATTRIBUTE::AUTOINCREMENT);}
         else if(attrLC == "unique"){attributes.push_back(ATTRIBUTE::UNIQUE);}
         else{
-        	cout << "ERROR: invalid attribute" << endl;
-        	exit(-1);
+        	throw string{"ERROR: invalid attribute"};
         }
     }
     return attributes;
@@ -206,32 +158,29 @@ TYPES Parser::parseType(const string& type){
 	if(type.substr(0, 5) == "bytes"){return TYPES::BYTES;}
 	if(type.substr(0, 6) == "string"){return TYPES::STRING;}
 
-	cout << "ERROR: invalid column type" << endl;
-	exit(-1);
+	throw string{"ERROR: invalid column type"};
 }
 
 
-int Parser::parseInsert(const string& query, map<string, Table>& tables){
+void Parser::parseInsert(const string& query, map<string, Table>& tables){
 	cmatch result;
 	regex regAllSyntax(R"([iI][nN][sS][eE][rR][tT]\s*(\([^\)]+\))\s*[tT][oO]\s+(\w+))");
 
 	regex_match(query.c_str(), result, regAllSyntax);
 	if(result[0].str().size() != query.size()){
-		cout << "ERROR: invalid insert request syntax" << endl;
-		exit(-1);
+		throw string{"ERROR: invalid insert request syntax"};
 	}
 
 	string values = result[1].str();
 	string tableName = result[2].str();
 	if(!tables.count(tableName)){
-		cout << "ERROR: can't find table " << tableName << " in database" << endl;
-		exit(-1);
+		throw string{"ERROR: can't find table " + tableName + " in database"};
 	}
 
-	return parseInsertValues(values, tables[tableName]);
+	parseInsertValues(values, tables[tableName]);
 }
 
-int Parser::parseInsertValues(const string& values, Table& table){
+void Parser::parseInsertValues(const string& values, Table& table){
 	cmatch result;
 	regex regValueSyntax(R"(\s*(,)\s*|\s*((\w+)\s*=\s*(\w+))\s*|\s*((\w+)\s*=\s*(\"[\w\s\n]+\"))\s*|\s*(\w+)\s*|\s*(\"[\w\s\n]+\")\s*)");
 
@@ -252,7 +201,7 @@ int Parser::parseInsertValues(const string& values, Table& table){
 
         if(matches[1].matched && !flag){
         	if(flagValuesType == 0){flagValuesType = 1;}
-        	if(flagValuesType == 2){cout << "ERROR: invalid values array" << endl; exit(-1);}
+        	if(flagValuesType == 2){throw string{"ERROR: invalid values array"};}
         	insertDefaultValue(columnCount, newRow, table);
         	columnCount++;
         }
@@ -277,26 +226,33 @@ int Parser::parseInsertValues(const string& values, Table& table){
         		insertVal(columnCount, matches[9	].str(), newRow, table);
         	}
         	else{
-        		cout << "ERROR: invalid values array" << endl;
-        		exit(-1);
+        		throw string{"ERROR: invalid values array"};
         	}
-
         	flag = true;
 	        columnCount++;
         }   
+    }
+
+    if(!flag && flagValuesType != 2){
+    	insertDefaultValue(newRow.size()-1, newRow, table);
+    	columnCount++;
     }
 
     if(flagValuesType == 2){
     	for(int i = 0; i < newRow.size(); i++){
     		if(holds_alternative<string>(newRow[i]) && get<string>(newRow[i]).size() == 0){
     			insertDefaultValue(i, newRow, table);
+    			columnCount++;
     		}
     	}
     }
 
+    if(columnCount != newRow.size()){
+    	throw string{"ERROR: invalid values count"};
+    }
 
     table.rows.push_back(newRow);
-    return 1;
+    table.rowsCountMax++;
 }
 
 bool Parser::findAttr(const vector<ATTRIBUTE>& vec, ATTRIBUTE attr){
@@ -309,20 +265,13 @@ bool Parser::findAttr(const vector<ATTRIBUTE>& vec, ATTRIBUTE attr){
 void Parser::insertDefaultValue(int columnNum, vector<variant<string, int, bool>>& newRow, Table& table){
 	Column column = table.metadata.columnsInfo[columnNum];
 	if(!findAttr(column.attributes, ATTRIBUTE::AUTOINCREMENT) && !column.hasDefaultValue){
-		cout << "ERROR: can't find default value" << endl;
-		exit(-1);
+		throw string{"ERROR: can't find default value"};
 	}
 	if(column.hasDefaultValue){
 		checkUnique(column.value, table, columnNum, newRow);
 	}
 	else{
-		if(table.rows.size() == 0){
-			checkUnique(0, table, columnNum, newRow);	
-		}
-		else{
-			variant<string, int, bool> val = get<int>(table.rows[table.rows.size()-1][columnNum]) + 1;	
-			checkUnique(val, table, columnNum, newRow);
-		}
+		checkUnique(table.rowsCountMax, table, columnNum, newRow);
 	}
 }
 
@@ -336,8 +285,7 @@ void Parser::checkUnique(variant<string, int, bool> val, Table& table, int colum
 			table.metadata.columnsInfo[columnNum].setValues.insert(val);
 		}
 		else{
-			cout << "ERROR: this value is already be in unique column" << endl;
-			exit(-1);
+			throw string{"ERROR: this value is already be in unique column"};
 		}
 	}	
 	else{
@@ -358,29 +306,25 @@ int Parser::findColIndexByName(const string& columnName, Table& table){
 void Parser::insertColVal(string columnName, string value, vector<variant<string, int, bool>>& newRow, Table& table){
 	int index = findColIndexByName(columnName, table);
 	if(index == -1){
-		cout << "ERROR: can't find column to insert value" << endl;
-		exit(-1);
+		throw string{"ERROR: can't find column to insert value"};
 	}
 
 	Column column = table.metadata.columnsInfo[index];
 	TYPES columnType = column.type;
 
 	if(findAttr(column.attributes, ATTRIBUTE::AUTOINCREMENT)){
-		cout << "ERROR: autoincrement column must be missed" << endl;
-		exit(-1);
+		throw string{"ERROR: autoincrement column must be missed"};
 	}
 
 	if(columnType == TYPES::STRING){	
 		if(value[0] != '"' || value[value.size()-1] != '"' || value.size() > column.size){
-			cout << "ERROR: invalid value" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid value"};
 		}
 		checkUnique(value, table, index, newRow);
 	}
 	else if(columnType == TYPES::BYTES){
 		if(value[0] != '0' || value[1] != 'x' || value.size()-2 != column.size){
-			cout << "ERROR: invalid value" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid value"};
 		}
 		checkUnique(value, table, index, newRow);
 	}
@@ -390,16 +334,14 @@ void Parser::insertColVal(string columnName, string value, vector<variant<string
 			checkUnique(val, table, index, newRow);
 		}
 		catch(...){
-			cout << "ERROR: invalid value" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid value"};
 		}
 	}
 	else{
 		if(value == "true"){checkUnique(true, table, index, newRow);}
 		else if(value == "false"){checkUnique(false, table, index, newRow);}
 		else{
-			cout << "ERROR: invalid value" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid value"};
 		}
 	}
 }
@@ -407,29 +349,25 @@ void Parser::insertColVal(string columnName, string value, vector<variant<string
 void Parser::insertVal(int columnNum, string value, vector<variant<string, int, bool>>& newRow, Table& table){
 	int index = columnNum;
 	if(index == -1){
-		cout << "ERROR: can't find column to insert value" << endl;
-		exit(-1);
+		throw string{"ERROR: can't find column to insert value"};
 	}
 
 	Column column = table.metadata.columnsInfo[index];
 	TYPES columnType = column.type;
 
 	if(findAttr(column.attributes, ATTRIBUTE::AUTOINCREMENT)){
-		cout << "ERROR: autoincrement column must be missed" << endl;
-		exit(-1);
+		throw string{"ERROR: autoincrement column must be missed"};
 	}
 
 	if(columnType == TYPES::STRING){	
 		if(value[0] != '"' || value[value.size()-1] != '"' || value.size() > column.size){
-			cout << "ERROR: invalid value" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid value"};
 		}
 		checkUnique(value, table, index, newRow);
 	}
 	else if(columnType == TYPES::BYTES){
 		if(value[0] != '0' || value[1] != 'x' || value.size()-2 != column.size){
-			cout << "ERROR: invalid value" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid value"};
 		}
 		checkUnique(value, table, index, newRow);
 	}
@@ -439,16 +377,14 @@ void Parser::insertVal(int columnNum, string value, vector<variant<string, int, 
 			checkUnique(val, table, index, newRow);
 		}
 		catch(...){
-			cout << "ERROR: invalid value" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid value"};
 		}
 	}
 	else{
 		if(value == "true"){checkUnique(true, table, index, newRow);}
 		else if(value == "false"){checkUnique(false, table, index, newRow);}
 		else{
-			cout << "ERROR: invalid value" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid value"};
 		}
 	}
 }
@@ -491,14 +427,12 @@ variant<string, int, bool> Parser::executeArithmeticCondition(const vector<varia
 			if(typeCur == TYPES::BOOL) type = 3;
 		}
 		else{
-			cout << "ERROR: invalid operand at last lvl" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid operand at last lvl"};
 		}
 	}
 
 	if(type == -1){
-		cout << "ERROR: invalid operand at last lvl" << endl;
-		exit(-1);
+		throw string{"ERROR: invalid operand at last lvl"};
 	}
 
 
@@ -513,8 +447,7 @@ variant<string, int, bool> Parser::executeArithmeticCondition(const vector<varia
 				operations.pop();
 			}
 			if(operations.empty()){
-				cout << "ERROR: invalid condition(last lvl, make postfix)" << endl;
-				exit(-1);
+				throw string{"ERROR: invalid condition(last lvl, make postfix)"};
 			}
 			operations.pop();
 		}
@@ -546,20 +479,17 @@ variant<string, int, bool> Parser::executeArithmeticCondition(const vector<varia
 			variant<string, int, bool> valL;
 			if(!ans.empty()) valR = ans.top();
 			else{
-				cout << "ERROR: invalid rvalue and lvalue" << endl;
-				exit(-1);
+				throw string{"ERROR: invalid rvalue and lvalue"};
 			}
 			ans.pop();
 			if(!ans.empty()) valL = ans.top();
 			else{
-				cout << "ERROR: invalid rvalue and lvalue" << endl;
-				exit(-1);
+				throw string{"ERROR: invalid rvalue and lvalue"};
 			}
 			ans.pop();
 
 			if(valR.index() != valL.index()){
-				cout << "ERROR: invalid types in condition" << endl;
-				exit(-1);
+				throw string{"ERROR: invalid types in condition"};
 			}
 
 
@@ -576,23 +506,20 @@ variant<string, int, bool> Parser::executeArithmeticCondition(const vector<varia
 					ans.push(ansStr);
 				}
 				else if(strL.size() > 2 && strR.size() > 2 && strL[0] == '0' && strR[0] == '0' && strL[1] == 'x' && strR[1] == 'x'){
-					cout << "ERROR: can't use operator + with bytes" << endl;
-					exit(-1);
+					throw string{"ERROR: can't use operator '+' with bytes"};
 				}
 				else{
-					cout << "ERROR: invalid operands for +" << endl;
-					exit(-1);
+					throw string{"ERROR: invalid operands for '+'"};
 				}
 				continue;
-				}
+			}
 			if(postfix[i] == "+" && valL.index() == 1) {ans.push(get<int>(valL)+get<int>(valR)); continue;}
 			if(postfix[i] == "+" && valL.index() == 2) {ans.push(get<bool>(valL)+get<bool>(valR)); continue;}
 			if(postfix[i] == "-" && valL.index() == 1) {ans.push(get<int>(valL)-get<int>(valR)); continue;}
 			if(postfix[i] == "%" && valL.index() == 1) {ans.push(get<int>(valL)%get<int>(valR)); continue;}
 			if(postfix[i] == "/" && valL.index() == 1) {ans.push(get<int>(valL)/get<int>(valR)); continue;}
 			if(postfix[i] == "*" && valL.index() == 1) {ans.push(get<int>(valL)*get<int>(valR)); continue;}
-			cout << "ERROR: invalid rvalue and lvalue types" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid rvalue and lvalue types"};
 		}
 
 		else{
@@ -602,12 +529,10 @@ variant<string, int, bool> Parser::executeArithmeticCondition(const vector<varia
 					int index = findColIndexByName(postfix[i].substr(1, postfix[i].size()-2), table);
 					
 					if(index == -1){
-						cout << "ERROR: can't find column" << endl;
-						exit(-1); 
+						throw string{"ERROR: can't find column"};
 					}
 					if(!table.metadata.columnsInfo[index].hasSize){
-						cout << "ERROR: invalid type of column. Operation size must be at string and bytes" << endl;
-						exit(-1);
+						throw string{"ERROR: invalid type of column. Operation size must be at string and bytes"};
 					}
 					ans.push((int)get<string>(row[index]).size()-2);	
 				}
@@ -616,8 +541,7 @@ variant<string, int, bool> Parser::executeArithmeticCondition(const vector<varia
 					
 					int index = findColIndexByName(postfix[i], table);
 					if(index == -1){
-						cout << "ERROR: can't find column" << endl;
-						exit(-1); 
+						throw string{"ERROR: can't find column"};
 					}
 					ans.push(row[index]);
 				}
@@ -636,8 +560,7 @@ variant<string, int, bool> Parser::executeArithmeticCondition(const vector<varia
 	
 
 	if(ans.size() != 1){
-		cout << "ERROR: invalid condition(stack size != 1)" << endl;
-		exit(-1);
+		throw string{"ERROR: invalid condition(stack size != 1)"};
 	}
 	return ans.top();
 }
@@ -685,8 +608,7 @@ int Parser::precedence(const string& op){
 	dict["%"] = 5;
 
 	if(dict.count(op) == 0){
-		cout << "ERROR: invalid operation" << endl;
-		exit(-1);
+		throw string{"ERROR: invalid operation"};
 	}
 	return dict[op];
 }
@@ -716,8 +638,7 @@ bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const
 				operations.pop();
 			}
 			if(operations.empty()){
-				cout << "ERROR: invalid condition(last lvl, make postfix)" << endl;
-				exit(-1);
+				throw string{"ERROR: invalid condition(last lvl, make postfix)"};
 			}
 			operations.pop();
 		}
@@ -746,20 +667,17 @@ bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const
 			variant<string, int, bool> valL;
 			if(!ans.empty()) valR = ans.top();
 			else{
-				cout << "ERROR: invalid rvalue and lvalue" << endl;
-				exit(-1);
+				throw string{"ERROR: invalid rvalue and lvalue"};
 			}
 			ans.pop();
 			if(!ans.empty()) valL = ans.top();
 			else{
-				cout << "ERROR: invalid rvalue and lvalue" << endl;
-				exit(-1);
+				throw string{"ERROR: invalid rvalue and lvalue"};
 			}
 			ans.pop();
 
 			if(valR.index() != valL.index()){
-				cout << "ERROR: invalid types in condition" << endl;
-				exit(-1);
+				throw string{"ERROR: invalid types in condition"};
 			}
 
 
@@ -775,16 +693,14 @@ bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const
 					ans.push(ansStr);
 				}
 				else if(strL.size() > 2 && strR.size() > 2 && strL[0] == '0' && strR[0] == '0' && strL[1] == 'x' && strR[1] == 'x'){
-					cout << "ERROR: can't use operator + with bytes" << endl;
-					exit(-1);
+					throw string{"ERROR: can't use operator + with bytes"};
 				}
 				else{
-					cout << "ERROR: invalid operands for +" << endl;
-					exit(-1);
+					throw string{"ERROR: invalid operands for +"};
 				}
 				continue;
-				}
-			if(postfix[i] == "+" && valL.index() == 1) 		{ans.push(get<int>(valL)		+	get<int>(valR)); continue;}
+			}
+			else if(postfix[i] == "+" && valL.index() == 1) {ans.push(get<int>(valL)		+	get<int>(valR)); continue;}
 			else if(postfix[i] == "-" && valL.index() == 1) {ans.push(get<int>(valL)		-	get<int>(valR)); continue;}
 			else if(postfix[i] == "%" && valL.index() == 1) {ans.push(get<int>(valL)		%	get<int>(valR)); continue;}
 			else if(postfix[i] == "/" && valL.index() == 1) {ans.push(get<int>(valL)		/	get<int>(valR)); continue;}
@@ -818,8 +734,7 @@ bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const
 			else if(postfix[i] == "||" && valL.index() == 2) {ans.push(get<bool>(valL)		||	get<bool>(valR)); continue;}
 			else if(postfix[i] == "^^" && valL.index() == 2) {ans.push(get<bool>(valL)		^	get<bool>(valR)); continue;}
 
-			cout << "ERROR: invalid rvalue and lvalue types" << endl;
-			exit(-1);
+			throw string{"ERROR: invalid rvalue and lvalue types"};
 		}
 
 		else{
@@ -829,12 +744,10 @@ bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const
 					int index = findColIndexByName(postfix[i].substr(1, postfix[i].size()-2), table);
 					
 					if(index == -1){
-						cout << "ERROR: can't find column" << endl;
-						exit(-1); 
+						throw string{"ERROR: can't find column"};
 					}
 					if(!table.metadata.columnsInfo[index].hasSize){
-						cout << "ERROR: invalid type of column. Operation size must be at string and bytes" << endl;
-						exit(-1);
+						throw string{"ERROR: invalid type of column. Operation size must be at string and bytes"};
 					}
 					ans.push((int)get<string>(row[index]).size()-2);	
 				}
@@ -842,8 +755,7 @@ bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const
 				else{
 					int index = findColIndexByName(postfix[i], table);
 					if(index == -1){
-						cout << "ERROR: can't find column" << endl;
-						exit(-1); 
+						throw string{"ERROR: can't find column"};
 					}
 					ans.push(row[index]);
 				}
@@ -861,8 +773,7 @@ bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const
 
 	
 	if(ans.size() != 1 || ans.top().index() != 2){
-		cout << "ERROR: invalid condition(stack size != 1 or top type isn't bool)" << endl;
-		exit(-1);
+		throw string{"ERROR: invalid condition(stack size != 1 or top type isn't bool)"};
 	}
 	return get<bool>(ans.top());
 }
@@ -871,15 +782,14 @@ bool Parser::checkCondition(const vector<variant<string, int, bool>>& row, const
 
 
 
-ResultSet Parser::parseSelect(const string& query, map<string, Table>& tables){
+vector<Row> Parser::parseSelect(const string& query, map<string, Table>& tables){
 	cmatch result;
 	regex reg(R"(([sS][eE][lL][eE][cC][tT])\s+([\w+\s*\,]+)\s+([fF][rR][oO][mM])\s+(\w+)\s+([wW][hH][eE][rR][eE])\s+(.+))");
 
     regex_match(query.c_str(), result, reg);
     
     if(result.size() != 7){
-    	cout << "ERROR: invalid select syntax" << endl;
-    	exit(-1);
+    	throw string{"ERROR: invalid select syntax"};
     }
 
     string columns = result[2].str();
@@ -887,8 +797,7 @@ ResultSet Parser::parseSelect(const string& query, map<string, Table>& tables){
     string condition = result[6].str();
 
     if(tables.count(tableName) == 0){
-    	cout << "ERROR: can't find table ins select" << endl;
-    	exit(-1);
+    	throw string{"ERROR: can't find table ins select"};
     }
 
     Table table = tables[tableName];
@@ -896,7 +805,10 @@ ResultSet Parser::parseSelect(const string& query, map<string, Table>& tables){
 
     vector<vector<variant<string, int, bool>>> ans;
     vector<vector<variant<string, int, bool>>> allRows = table.rows;
-    ResultSet resSet = ResultSet(true);
+    
+    vector<Row> ansRows;
+
+    
     for(int i = 0; i < allRows.size(); i++){
     	if(checkCondition(allRows[i], condition, table)){
     		vector<variant<string, int, bool>> ansRow;
@@ -912,10 +824,10 @@ ResultSet Parser::parseSelect(const string& query, map<string, Table>& tables){
     			columnsInfo.push_back(columnMetadata);
     		}
     		Row row = Row(ansRow, columnsInfo);
-    		resSet.addRow(row);
+    		ansRows.push_back(row);
     	}
     }
-    return resSet;
+    return ansRows;
 
 }
 
@@ -932,22 +844,16 @@ vector<int> Parser::parseColumnsToVecIndex(const string& columns, Table& table){
         vec.push_back(matches[0]); 
     }
 
-    if(vec[0] == "," || vec[vec.size()-1] == ","){
-    	cout << "ERROR: invalid select columns syntax";
-    	exit(-1);
-    }
 
     vector<int> ansVec;
     for(int i = 0; i < vec.size(); i++){
     	if(i % 2 == 0 && vec[i] == "," || i % 2 == 1 && vec[i] != ","){
-    		cout << "ERROR: invalid select columns syntax(invalid sequency , and columns name)" << endl;
-    		exit(-1);
+    		throw string{"ERROR: invalid select columns syntax(invalid sequency , and columns name)"};
     	}
     	if(i % 2 == 0){
     		int index = findColIndexByName(vec[i], table);
     		if(index == -1){
-    			cout << "ERROR: can't find column for select" << endl;
-    			exit(-1);
+    			throw string{"ERROR: can't find column for select"};
     		}
     		ansVec.push_back(index);
     	}
@@ -956,47 +862,42 @@ vector<int> Parser::parseColumnsToVecIndex(const string& columns, Table& table){
 }
 
 
-int Parser::parseDelete(const string& query, map<string, Table>& tables){
+void Parser::parseDelete(const string& query, map<string, Table>& tables){
 	cmatch result;
 	regex reg(R"(([dD][eE][lL][eE][tT][eE])\s+(\w+)\s+([wW][hH][eE][rR][eE])\s+(.+))");
 
     regex_match(query.c_str(), result, reg);
     
     if(result.size() != 5){
-    	cout << "ERROR: invalid delete syntax" << endl;
-    	exit(-1);
+    	throw string{"ERROR: invalid delete syntax"};
     }
 
     string tableName = result[2].str();
     string condition = result[4].str();
 
     if(tables.count(tableName) == 0){
-    	cout << "ERROR: can't find table for delete" << endl;
-    	exit(-1);
+    	throw string{"ERROR: can't find table for delete"};
     }
 
     Table table = tables[tableName];
-    int countForDelete = 0;
+    
     vector<vector<variant<string, int, bool>>> ans;
     vector<vector<variant<string, int, bool>>> rows = table.rows;
     for (int i = 0; i < rows.size(); i++){
-    	if(checkCondition(rows[i], condition, table)) countForDelete++;
-    	else{ans.push_back(rows[i]);}
+    	if(!checkCondition(rows[i], condition, table)) ans.push_back(rows[i]); 
     }
     tables[tableName].rows = ans;
-    return countForDelete;
 }
 
 
-int Parser::parseUpdate(const string& query, map<string, Table>& tables){
+void Parser::parseUpdate(const string& query, map<string, Table>& tables){
 	cmatch result;
 	regex reg(R"([uU][pP][dD][aA][tT][eE]\s+(\w+)\s+[sS][eE][tT]\s+([\w\+\s\*\,\=\/\"\-\|]+)\s+[wW][hH][eE][rR][eE]\s+(.+))");
 
     regex_match(query.c_str(), result, reg);
     
     if(result.size() != 4){
-    	cout << "ERROR: invalid select syntax" << endl;
-    	exit(-1);
+    	throw string{"ERROR: invalid select syntax"};
     }
 
     string tableName = result[1].str();
@@ -1004,16 +905,14 @@ int Parser::parseUpdate(const string& query, map<string, Table>& tables){
     string condition = result[3].str();
 
     if(tables.count(tableName) == 0){
-    	cout << "ERROR: can't find table in update" << endl;
-    	exit(-1);
+    	throw string{"ERROR: can't find table in update"};
     }
 
     Table table = tables[tableName];
 
-    int countUpdated = 0;
+    
     for(int i = 0; i < table.rows.size(); i++){
     	if(checkCondition(table.rows[i], condition, table)){
-    		countUpdated++;
 			vector<pair<int, variant<string, int, bool>>> vecAssignments = parseAssignments(table.rows[i], assignments, table);
 			for(int j = 0; j < vecAssignments.size(); j++){
 				table.rows[i][vecAssignments[j].first] = vecAssignments[j].second;
@@ -1021,10 +920,10 @@ int Parser::parseUpdate(const string& query, map<string, Table>& tables){
     	}
     }
     tables[tableName] = table;
-    return countUpdated;
-
-
 }
+
+
+
 
 vector<pair<int, variant<string, int, bool>>> Parser::parseAssignments(const vector<variant<string, int, bool>>& row, const string& assignments, Table& table){
 	regex reg(R"((\w+)\s*=\s*([\w\s\+\-\*\/\"\%]+))");
@@ -1051,9 +950,15 @@ vector<pair<int, variant<string, int, bool>>> Parser::parseAssignments(const vec
 	    variant<string, int, bool> rightVal = executeArithmeticCondition(row, vecRight, table);
 	    int index = findColIndexByName(columnName, table);
 	    if(index == -1){
-	    	cout << "ERROR: can't find column(left value in update)" << endl;
-	    	exit(-1);
+	    	throw string{"ERROR: can't find column(left value in update)"};
 	    }
+
+
+	    if((findAttr(table.metadata.columnsInfo[index].attributes, ATTRIBUTE::UNIQUE) || findAttr(table.metadata.columnsInfo[index].attributes, ATTRIBUTE::KEY)) && row[index] != rightVal && table.metadata.columnsInfo[index].setValues.count(rightVal) == 1){
+	    	throw string{"ERROR: can't update. This value is already in unique column"};
+	    }
+
+
 
 	    TYPES type = table.metadata.columnsInfo[index].type;
 	    if((type == TYPES::STRING || type == TYPES::BYTES) && rightVal.index() == 0){
@@ -1075,8 +980,7 @@ vector<pair<int, variant<string, int, bool>>> Parser::parseAssignments(const vec
 	    	ans.push_back(para);
 	    } 
 	    else{
-	    	cout << "ERROR: invalid operands type in assignments of update" << endl;
-	    	exit(-1);
+	    	throw string{"ERROR: invalid operands type in assignments of update"};
 	    }
 
     }
