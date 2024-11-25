@@ -33,32 +33,28 @@ public:
 		pair<int, TYPES> para = findColByName(column);
 		
 		if(para.first == -1 || para.second != TYPES::INT32){
-			cout << "ERROR: invalid integer column" << endl;
-			exit(-1); 
+			throw string{"ERROR: invalid integer column"}; 
 		}
 		return get<int>(row[para.first]);
 	}
 	string getString(const string& column){
 		pair<int, TYPES> para = findColByName(column);
 		if(para.first == -1 || para.second != TYPES::STRING){
-			cout << "ERROR: invalid string column" << endl;
-			exit(-1); 
+			throw string{"ERROR: invalid string column"}; 
 		}
 		return get<string>(row[para.first]);
 	}
 	bool getBool(const string& column){
 		pair<int, TYPES> para = findColByName(column);
 		if(para.first == -1 || para.second != TYPES::BOOL){
-			cout << "ERROR: invalid boolean column" << endl;
-			exit(-1); 
+			throw string{"ERROR: invalid boolean column"};
 		}
 		return get<bool>(row[para.first]);
 	}
 	string getBytes(const string& column){
 		pair<int, TYPES> para = findColByName(column);
 		if(para.first == -1 || para.second != TYPES::BYTES){
-			cout << "ERROR: invalid bytes column" << endl;
-			exit(-1); 
+			throw string{"ERROR: invalid bytes column"};
 		}
 		return get<string>(row[para.first]);
 	}

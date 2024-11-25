@@ -27,21 +27,32 @@ void Parser::parseCreate(const string& query, map<string, Table>& tables){
 	tableMetadata.tableName = result[1].str();
 	string columnsInfo = result[2].str();
 
-	regex regColumnsInfo(R"((\{[\w, ]+\})?\s*(\w+)\s*:\s*(\w+(\[[\-0-9]*\])?)\s*(=\s*((\w+)|(\"[\w\s\n]+\")))?\s*[,]?\s*)");
+	regex regColumnsInfo(R"((\{[\w, ]+\})?\s*(\w+)\s*(:)?\s*(\w*(\[[\-0-9]*\])?)\s*(=\s*((\w+)|(\"[\w\s\n]+\")))?\s*[,]?\s*)");
 
 	auto begin = sregex_iterator(columnsInfo.begin(), columnsInfo.end(), regColumnsInfo);
     auto end = sregex_iterator();
 
     for (sregex_iterator i = begin; i != end; ++i) {
         smatch matches = *i;
-		
         Column column = Column();
+
 
         if(matches[1].matched){
         	column.attributes = parseAttributes(matches[1].str());
         }
         column.columnName = matches[2].str();
-        column.type = parseType(toLowerCase(matches[3].str()));
+		if(column.columnName == ""){
+			throw string{"ERROR: invalid column name"};
+		}
+        if(findColIndexByNameInColsVec(column.columnName, tableMetadata.columnsInfo) != -1){
+        	throw string{"ERROR: column names must be different"};
+        }
+
+        if(matches[3].str() != ":"){
+        	throw string{"ERROR: invalid column info syntax"};
+        }
+
+        column.type = parseType(toLowerCase(matches[4].str()));
         
         if(column.type != TYPES::INT32 && findAttr(column.attributes, ATTRIBUTE::AUTOINCREMENT)){
         	throw string{"ERROR: only int32 type can use autoincrement attribute"};
@@ -55,12 +66,12 @@ void Parser::parseCreate(const string& query, map<string, Table>& tables){
         }
         if (column.type == TYPES::STRING || column.type == TYPES::BYTES){
         	column.hasSize = true;
-        	int posOpen = matches[3].str().find("[")+1;
-        	int posClose = matches[3].str().find("]");
+        	int posOpen = matches[5].str().find("[")+1;
+        	int posClose = matches[5].str().find("]");
         	if(posOpen == -1 || posClose == -1){	
         		throw string{"ERROR: invalid type, string and bytes must have '[]'"};
         	}
-        	try{column.size = stoi(matches[3].str().substr(posOpen, posClose-posOpen));}
+        	try{column.size = stoi(matches[5].str().substr(posOpen, posClose-posOpen));}
         	catch(...){
         		throw string{"ERROR: invalid value in [] scopes"};
         	}
@@ -74,7 +85,7 @@ void Parser::parseCreate(const string& query, map<string, Table>& tables){
         }
 
         
-        if(matches[5].matched){
+        if(matches[6].matched){
 
         	if (findAttr(column.attributes, ATTRIBUTE::AUTOINCREMENT)){
         		throw string{"ERROR: autoincrement column can't have default value"};
@@ -82,38 +93,38 @@ void Parser::parseCreate(const string& query, map<string, Table>& tables){
 
         	column.hasDefaultValue = true;
         	if(column.type == TYPES::STRING){
-        		if (matches[6].str().size()-2 <= column.size && matches[6].str()[0] == '"' && matches[6].str()[matches[6].str().size()-1] == '"'){
-        			column.value = matches[6].str();
+        		if (matches[7].str().size()-2 <= column.size && matches[7].str()[0] == '"' && matches[7].str()[matches[7].str().size()-1] == '"'){
+        			column.value = matches[7].str();
         		}
         		else{
-        			throw string{"ERROR: invalid default value"};
+        			throw string{"ERROR: invalid default value for string"};
         		}
         	}
         	else if(column.type == TYPES::BYTES){
-        		if (matches[6].str().size() == column.size){
-        			column.value = matches[6].str();
+        		if (matches[7].str().size()-2 == column.size && matches[7].str().substr(0, 2) == "0x"){
+        			column.value = matches[7].str();
         		}
         		else{
-        			throw string{"ERROR: invalid size of string of default value"};
+        			throw string{"ERROR: invalid default value for bytes"};
         		}
         	}
         	else if(column.type == TYPES::INT32){
         		try{
-        			column.value = stoi(matches[6].str());
+        			column.value = stoi(matches[7].str());
         		}
         		catch(...){
-        			throw string{"ERROR: can't convert default value to int"};
+        			throw string{"ERROR: invalid default value for int"};
         		}
         	}
         	else if(column.type == TYPES::BOOL){
-        		if(toLowerCase(matches[6].str()) == "true"){
+        		if(toLowerCase(matches[7].str()) == "true"){
         			column.value = true;
         		}
-        		else if(toLowerCase(matches[6].str()) == "false"){
+        		else if(toLowerCase(matches[7].str()) == "false"){
         			column.value = false;
         		}
         		else{
-        			throw string{"ERROR: can't convert default value to bool"};
+        			throw string{"ERROR: invalid default value for bool"};
         		}
         	}
         }
@@ -164,7 +175,7 @@ TYPES Parser::parseType(const string& type){
 
 void Parser::parseInsert(const string& query, map<string, Table>& tables){
 	cmatch result;
-	regex regAllSyntax(R"([iI][nN][sS][eE][rR][tT]\s*(\([^\)]+\))\s*[tT][oO]\s+(\w+))");
+	regex regAllSyntax(R"([iI][nN][sS][eE][rR][tT]\s*(\([^\)]*\))\s*[tT][oO]\s+(\w+))");
 
 	regex_match(query.c_str(), result, regAllSyntax);
 	if(result[0].str().size() != query.size()){
@@ -198,7 +209,9 @@ void Parser::parseInsertValues(const string& values, Table& table){
 
     for (sregex_iterator i = begin; i != end; ++i) {
         smatch matches = *i;
-
+        if(newRow.size() == columnCount){
+        	throw string{"ERROR: values more then columns"};
+        }
         if(matches[1].matched && !flag){
         	if(flagValuesType == 0){flagValuesType = 1;}
         	if(flagValuesType == 2){throw string{"ERROR: invalid values array"};}
@@ -223,7 +236,7 @@ void Parser::parseInsertValues(const string& values, Table& table){
         	}
         	else if(matches[9].matched && (flagValuesType == 0 || flagValuesType == 1)){
         		if(flagValuesType == 0){flagValuesType = 1;}
-        		insertVal(columnCount, matches[9	].str(), newRow, table);
+        		insertVal(columnCount, matches[9].str(), newRow, table);
         	}
         	else{
         		throw string{"ERROR: invalid values array"};
@@ -234,6 +247,9 @@ void Parser::parseInsertValues(const string& values, Table& table){
     }
 
     if(!flag && flagValuesType != 2){
+    	if(newRow.size() == columnCount){
+        	throw string{"ERROR: values more then columns"};
+        }
     	insertDefaultValue(newRow.size()-1, newRow, table);
     	columnCount++;
     }
@@ -294,6 +310,12 @@ void Parser::checkUnique(variant<string, int, bool> val, Table& table, int colum
 }
 
 
+int Parser::findColIndexByNameInColsVec(const string& columnName, const vector<Column>& columns){
+	for(int i = 0; i < columns.size(); i++){
+		if(columns[i].columnName == columnName) return i;
+	}
+	return -1;
+}
 
 int Parser::findColIndexByName(const string& columnName, Table& table){
 	vector<Column> columns = table.metadata.columnsInfo;
@@ -317,7 +339,7 @@ void Parser::insertColVal(string columnName, string value, vector<variant<string
 	}
 
 	if(columnType == TYPES::STRING){	
-		if(value[0] != '"' || value[value.size()-1] != '"' || value.size() > column.size){
+		if(value[0] != '"' || value[value.size()-1] != '"' || value.size()-2 > column.size){
 			throw string{"ERROR: invalid value"};
 		}
 		checkUnique(value, table, index, newRow);
@@ -334,6 +356,7 @@ void Parser::insertColVal(string columnName, string value, vector<variant<string
 			checkUnique(val, table, index, newRow);
 		}
 		catch(...){
+
 			throw string{"ERROR: invalid value"};
 		}
 	}
@@ -341,6 +364,7 @@ void Parser::insertColVal(string columnName, string value, vector<variant<string
 		if(value == "true"){checkUnique(true, table, index, newRow);}
 		else if(value == "false"){checkUnique(false, table, index, newRow);}
 		else{
+
 			throw string{"ERROR: invalid value"};
 		}
 	}
@@ -360,7 +384,7 @@ void Parser::insertVal(int columnNum, string value, vector<variant<string, int, 
 	}
 
 	if(columnType == TYPES::STRING){	
-		if(value[0] != '"' || value[value.size()-1] != '"' || value.size() > column.size){
+		if(value[0] != '"' || value[value.size()-1] != '"' || value.size()-2 > column.size){
 			throw string{"ERROR: invalid value"};
 		}
 		checkUnique(value, table, index, newRow);
@@ -410,7 +434,7 @@ variant<string, int, bool> Parser::executeArithmeticCondition(const vector<varia
 			type = 1;
 			break;
 		}
-		else if(vec[i] == "true" && vec[i] == "false"){
+		else if(vec[i] == "true" || vec[i] == "false"){
 			type = 3;
 			break;
 		}

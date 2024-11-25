@@ -32,6 +32,7 @@ private:
 	void insertVal(int columnNum, string value, vector<variant<string, int, bool>>& newRow, Table& table);
 	void insertColVal(string columnName, string value, vector<variant<string, int, bool>>& newRow, Table& table);
 	int findColIndexByName(const string& columnName, Table& table);
+	int findColIndexByNameInColsVec(const string& columnName, const vector<Column>& columns);
 	void insertDefaultValue(int columnNum, vector<variant<string, int, bool>>& newRow, Table& table);
 	bool findAttr(const vector<ATTRIBUTE>& vec, ATTRIBUTE attr);
 	void checkUnique(variant<string, int, bool> val, Table& table, int columnNum, vector<variant<string, int, bool>>& newRow);

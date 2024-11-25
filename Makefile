@@ -52,7 +52,7 @@ SOURCES = $(wildcard src/*.cpp)
 
 OBJECTS = $(SOURCES:src/%.cpp=build/%.o)
 
-EXECUTABLE = build/tests
+EXECUTABLE = build/test
 
 
 #---------------
@@ -97,7 +97,7 @@ help: build/help
 #--------------
 
 # Run program:
-tests: $(EXECUTABLE)
+test: $(EXECUTABLE)
 	./$(EXECUTABLE)
 
 #---------------
