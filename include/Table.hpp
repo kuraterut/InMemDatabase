@@ -5,8 +5,6 @@
 
 using namespace std;
 
-
-
 class Column{
 public:
 	string columnName;

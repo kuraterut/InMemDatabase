@@ -37,7 +37,6 @@ private:
 	bool findAttr(const vector<ATTRIBUTE>& vec, ATTRIBUTE attr);
 	void checkUnique(variant<string, int, bool> val, Table& table, int columnNum, vector<variant<string, int, bool>>& newRow);
 
-
 	int precedence(const string& op);
 	bool isOperator(const string& op);
 	bool isStringDigit(const string& str);
@@ -47,7 +46,6 @@ private:
 	vector<int> parseColumnsToVecIndex(const string& columns, Table& table);
 
 	vector<pair<int, variant<string, int, bool>>> parseAssignments(const vector<variant<string, int, bool>>& row, const string& assignments, Table& table);
-
 
 	bool checkCondition(const vector<variant<string, int, bool>>& row, const string& condition, Table& table);
 

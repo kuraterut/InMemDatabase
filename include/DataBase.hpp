@@ -9,10 +9,6 @@
 #include <nlohmann/json.hpp>
 #include "Parser.hpp"
 
-// #ifndef FILE_H
-// #define FILE_H
-// #include "Help.hpp"
-// #endif
 
 
 using namespace std;
@@ -27,8 +23,6 @@ public:
 
 	bool saveToFile(const string& filePath);
 	Database loadFromFile(const string& filePath);
-
-	map<string, Table> getMap(){return tables;}
 	
 private:
 	bool findAttr(const vector<ATTRIBUTE>& vec, ATTRIBUTE attr);
